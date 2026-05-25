@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   CATEGORIES,
@@ -30,6 +30,9 @@ export default function EntryClient() {
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
+
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load entry for selected date
   useEffect(() => {
@@ -54,6 +57,7 @@ export default function EntryClient() {
           setRows(makeEmptyRows());
           setSavedAt(null);
         }
+        setIsDirty(false);
       })
       .finally(() => active && setLoading(false));
     return () => { active = false; };
@@ -96,6 +100,39 @@ export default function EntryClient() {
     return r ? CATEGORIES.reduce((s, c) => s + (r.pendingCounts?.[c] || 0), 0) : 0;
   }, [rows]);
 
+  // ── save ────────────────────────────────────────────────────────────────────
+  const handleSave = useCallback(async (auto = false) => {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/entries", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, rows }),
+      });
+      const data = await res.json();
+      if (data.entry) {
+        setSavedAt(data.entry.updatedAt);
+        setIsDirty(false);
+        if (!auto) setToast({ type: "success", msg: "Entry saved successfully" });
+      } else {
+        setToast({ type: "error", msg: "Could not save entry" });
+      }
+    } catch {
+      setToast({ type: "error", msg: "Network error while saving" });
+    } finally {
+      setSaving(false);
+      if (!auto) setTimeout(() => setToast(null), 2800);
+    }
+  }, [date, rows]);
+
+  // ── autosave: debounce 1.5 s after any change ───────────────────────────────
+  useEffect(() => {
+    if (!isDirty || loading) return;
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => handleSave(true), 1500);
+    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
+  }, [rows, isDirty, loading, handleSave]);
+
   // ── cell updaters ───────────────────────────────────────────────────────────
   function updateCell(stage: string, subStage: string, cat: Category, value: string) {
     const num = Math.max(0, parseInt(value || "0", 10) || 0);
@@ -106,6 +143,7 @@ export default function EntryClient() {
           : r
       )
     );
+    setIsDirty(true);
   }
 
   function updatePendingCell(stage: string, subStage: string, cat: Category, value: string) {
@@ -119,30 +157,7 @@ export default function EntryClient() {
         return { ...r, pendingCounts: base };
       })
     );
-  }
-
-  // ── save / reset / delete ───────────────────────────────────────────────────
-  async function handleSave() {
-    setSaving(true);
-    try {
-      const res = await fetch("/api/entries", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date, rows }),
-      });
-      const data = await res.json();
-      if (data.entry) {
-        setSavedAt(data.entry.updatedAt);
-        setToast({ type: "success", msg: "Entry saved successfully" });
-      } else {
-        setToast({ type: "error", msg: "Could not save entry" });
-      }
-    } catch {
-      setToast({ type: "error", msg: "Network error while saving" });
-    } finally {
-      setSaving(false);
-      setTimeout(() => setToast(null), 2800);
-    }
+    setIsDirty(true);
   }
 
   async function handleReset() {
@@ -230,12 +245,12 @@ export default function EntryClient() {
             Delete
           </button>
           <button
-            onClick={handleSave}
+            onClick={() => handleSave(false)}
             disabled={saving}
             className="flex items-center gap-2 rounded-md bg-[#00abc0] px-4 py-2 text-[13px] font-semibold text-white shadow-sm hover:bg-[#0099aa] disabled:opacity-60"
           >
             <Save24Regular className="h-4 w-4" />
-            {saving ? "Saving…" : "Save Entry"}
+            {saving ? "Saving…" : isDirty ? "Save Entry*" : "Save Entry"}
           </button>
         </div>
       </div>
