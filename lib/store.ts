@@ -1,144 +1,115 @@
-import fs from "fs";
-import path from "path";
 import { DailyEntry } from "./schema";
 
-// ── SQLite setup (node:sqlite — built into Node 22) ─────────────────────────
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { DatabaseSync } = require("node:sqlite") as {
-  DatabaseSync: new (path: string) => SqliteDb;
-};
+// ── Detect environment ───────────────────────────────────────────────────────
+// BLOB_READ_WRITE_TOKEN is injected automatically when a Blob store is linked.
+const USE_BLOB = !!process.env.BLOB_READ_WRITE_TOKEN;
 
-interface SqliteDb {
-  exec(sql: string): void;
-  prepare(sql: string): SqliteStmt;
-}
-interface SqliteStmt {
-  run(...args: unknown[]): void;
-  get(...args: unknown[]): Record<string, unknown> | undefined;
-  all(...args: unknown[]): Record<string, unknown>[];
-}
+const BLOB_PATHNAME = "vidhai-entries.json";
 
-const DATA_DIR  = path.join(process.cwd(), "data");
-const DB_PATH   = path.join(DATA_DIR, "entries.db");
-const JSON_PATH = path.join(DATA_DIR, "entries.json"); // for one-time migration
-
-function getDb(): SqliteDb {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-
-  const db = new DatabaseSync(DB_PATH);
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS daily_entries (
-      id         TEXT PRIMARY KEY,
-      date       TEXT UNIQUE NOT NULL,
-      rows_json  TEXT NOT NULL DEFAULT '[]',
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    )
-  `);
-
-  // One-time migration from JSON file → SQLite
-  migrateFromJson(db);
-
-  return db;
+// ── Vercel Blob helpers ──────────────────────────────────────────────────────
+async function blobReadAll(): Promise<DailyEntry[]> {
+  const { list } = await import("@vercel/blob");
+  const { blobs } = await list({ prefix: BLOB_PATHNAME });
+  if (blobs.length === 0) return [];
+  const res = await fetch(blobs[0].url);
+  if (!res.ok) return [];
+  const data = await res.json() as { entries?: DailyEntry[] };
+  return data.entries ?? [];
 }
 
-function migrateFromJson(db: SqliteDb) {
-  if (!fs.existsSync(JSON_PATH)) return;
+async function blobWriteAll(entries: DailyEntry[]): Promise<void> {
+  const { put } = await import("@vercel/blob");
+  await put(BLOB_PATHNAME, JSON.stringify({ entries }, null, 2), {
+    access: "public",
+    allowOverwrite: true,
+    contentType: "application/json",
+  });
+}
 
-  const count = db.prepare("SELECT COUNT(*) as n FROM daily_entries").get() as { n: number };
-  if (count.n > 0) return; // already migrated
-
+// ── JSON file helpers (local dev) ────────────────────────────────────────────
+function jsonReadAll(): DailyEntry[] {
+  const fs   = require("fs")   as typeof import("fs");
+  const path = require("path") as typeof import("path");
+  const dir  = path.join(process.cwd(), "data");
+  const file = path.join(dir, "entries.json");
+  if (!fs.existsSync(dir))  fs.mkdirSync(dir, { recursive: true });
+  if (!fs.existsSync(file)) fs.writeFileSync(file, JSON.stringify({ entries: [] }, null, 2));
   try {
-    const raw  = fs.readFileSync(JSON_PATH, "utf-8");
-    const json = JSON.parse(raw) as { entries?: DailyEntry[] };
-    const entries = json.entries || [];
-    if (entries.length === 0) return;
-
-    const insert = db.prepare(
-      "INSERT OR IGNORE INTO daily_entries (id, date, rows_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
-    );
-    for (const e of entries) {
-      insert.run(e.id, e.date, JSON.stringify(e.rows), e.createdAt, e.updatedAt);
-    }
-    console.log(`[store] Migrated ${entries.length} entries from JSON → SQLite`);
-  } catch (err) {
-    console.error("[store] JSON migration failed:", err);
-  }
+    return (JSON.parse(fs.readFileSync(file, "utf-8")).entries ?? []) as DailyEntry[];
+  } catch { return []; }
 }
 
-function toEntry(row: Record<string, unknown>): DailyEntry {
-  return {
-    id:        row.id        as string,
-    date:      row.date      as string,
-    rows:      JSON.parse(row.rows_json as string),
-    createdAt: row.created_at as string,
-    updatedAt: row.updated_at as string,
-  };
+function jsonWriteAll(entries: DailyEntry[]): void {
+  const fs   = require("fs")   as typeof import("fs");
+  const path = require("path") as typeof import("path");
+  const file = path.join(process.cwd(), "data", "entries.json");
+  fs.writeFileSync(file, JSON.stringify({ entries }, null, 2));
 }
 
-// ── Public API ───────────────────────────────────────────────────────────────
+// ── Async public API (used by API routes) ────────────────────────────────────
 
-export function readAll(): DailyEntry[] {
-  try {
-    const db   = getDb();
-    const rows = db.prepare("SELECT * FROM daily_entries ORDER BY date DESC").all();
-    return rows.map(toEntry);
-  } catch {
-    return [];
-  }
+export async function readAllAsync(): Promise<DailyEntry[]> {
+  return USE_BLOB ? blobReadAll() : jsonReadAll();
 }
 
-export function findByDate(date: string): DailyEntry | null {
-  try {
-    const db  = getDb();
-    const row = db.prepare("SELECT * FROM daily_entries WHERE date = ?").get(date);
-    return row ? toEntry(row) : null;
-  } catch {
-    return null;
-  }
+export async function writeAllAsync(entries: DailyEntry[]): Promise<void> {
+  return USE_BLOB ? blobWriteAll(entries) : jsonWriteAll(entries);
 }
 
-export function upsertEntry(entry: DailyEntry): DailyEntry {
-  const db  = getDb();
+export async function upsertEntryAsync(entry: DailyEntry): Promise<DailyEntry> {
+  const all = await readAllAsync();
+  const idx = all.findIndex((e) => e.date === entry.date);
   const now = new Date().toISOString();
-  const existing = db.prepare("SELECT id, created_at FROM daily_entries WHERE date = ?").get(entry.date);
-
-  if (existing) {
-    db.prepare(
-      "UPDATE daily_entries SET rows_json = ?, updated_at = ? WHERE date = ?"
-    ).run(JSON.stringify(entry.rows), now, entry.date);
-    return {
-      ...entry,
-      id:        existing.id        as string,
-      createdAt: existing.created_at as string,
-      updatedAt: now,
-    };
+  let result: DailyEntry;
+  if (idx >= 0) {
+    result = { ...all[idx], rows: entry.rows, updatedAt: now };
+    all[idx] = result;
   } else {
-    const id = entry.id || `entry_${Date.now()}`;
-    db.prepare(
-      "INSERT INTO daily_entries (id, date, rows_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
-    ).run(id, entry.date, JSON.stringify(entry.rows), now, now);
-    return { ...entry, id, createdAt: now, updatedAt: now };
+    result = { ...entry, id: entry.id || `entry_${Date.now()}`, createdAt: now, updatedAt: now };
+    all.push(result);
   }
+  await writeAllAsync(all);
+  return result;
 }
 
-export function deleteEntry(date: string): boolean {
-  const db  = getDb();
-  const row = db.prepare("SELECT id FROM daily_entries WHERE date = ?").get(date);
-  if (!row) return false;
-  db.prepare("DELETE FROM daily_entries WHERE date = ?").run(date);
+export async function findByDateAsync(date: string): Promise<DailyEntry | null> {
+  const all = await readAllAsync();
+  return all.find((e) => e.date === date) ?? null;
+}
+
+export async function deleteEntryAsync(date: string): Promise<boolean> {
+  const all  = await readAllAsync();
+  const next = all.filter((e) => e.date !== date);
+  if (next.length === all.length) return false;
+  await writeAllAsync(next);
   return true;
 }
 
-// kept for API export route compatibility
-export function writeAll(entries: DailyEntry[]) {
-  const db = getDb();
-  db.exec("DELETE FROM daily_entries");
-  const insert = db.prepare(
-    "INSERT INTO daily_entries (id, date, rows_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
-  );
-  for (const e of entries) {
-    insert.run(e.id, e.date, JSON.stringify(e.rows), e.createdAt, e.updatedAt);
+// ── Sync shims for server-side page components (local only) ──────────────────
+export function readAll(): DailyEntry[] { return jsonReadAll(); }
+export function writeAll(e: DailyEntry[]): void { jsonWriteAll(e); }
+export function findByDate(date: string): DailyEntry | null {
+  return jsonReadAll().find((e) => e.date === date) ?? null;
+}
+export function upsertEntry(entry: DailyEntry): DailyEntry {
+  const all = jsonReadAll();
+  const idx = all.findIndex((e) => e.date === entry.date);
+  const now = new Date().toISOString();
+  let result: DailyEntry;
+  if (idx >= 0) {
+    result = { ...all[idx], rows: entry.rows, updatedAt: now };
+    all[idx] = result;
+  } else {
+    result = { ...entry, id: entry.id || `entry_${Date.now()}`, createdAt: now, updatedAt: now };
+    all.push(result);
   }
+  jsonWriteAll(all);
+  return result;
+}
+export function deleteEntry(date: string): boolean {
+  const all  = jsonReadAll();
+  const next = all.filter((e) => e.date !== date);
+  if (next.length === all.length) return false;
+  jsonWriteAll(next);
+  return true;
 }

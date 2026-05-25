@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readAll, upsertEntry, findByDate } from "@/lib/store";
+import { readAllAsync, upsertEntryAsync, findByDateAsync } from "@/lib/store";
 import { DailyEntry, makeEmptyRows } from "@/lib/schema";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const date = searchParams.get("date");
   if (date) {
-    const found = findByDate(date);
+    const found = await findByDateAsync(date);
     return NextResponse.json({ entry: found });
   }
-  const entries = readAll().sort((a, b) => (a.date < b.date ? 1 : -1));
+  const entries = (await readAllAsync()).sort((a, b) => (a.date < b.date ? 1 : -1));
   return NextResponse.json({ entries });
 }
 
@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "date is required" }, { status: 400 });
   }
   const rows = body.rows && body.rows.length > 0 ? body.rows : makeEmptyRows();
-  const saved = upsertEntry({
+  const saved = await upsertEntryAsync({
     id: body.id || `entry_${Date.now()}`,
     date: body.date,
     rows,

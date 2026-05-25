@@ -3,14 +3,15 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "cross-env NODE_OPTIONS=--experimental-sqlite next dev",
-    "build": "cross-env NODE_OPTIONS=--experimental-sqlite next build",
-    "start": "cross-env NODE_OPTIONS=--experimental-sqlite next start",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
     "lint": "next lint"
   },
   "dependencies": {
     "@heroui/react": "^2.4.6",
     "@fluentui/react-icons": "^2.0.249",
+    "@vercel/blob": "^0.27.0",
     "cross-env": "^7.0.3",
     "framer-motion": "^11.3.19",
     "next": "14.2.5",
