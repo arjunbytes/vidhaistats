@@ -18,10 +18,15 @@ async function blobReadAll(): Promise<DailyEntry[]> {
 }
 
 async function blobWriteAll(entries: DailyEntry[]): Promise<void> {
-  const { put } = await import("@vercel/blob");
+  const { put, list, del } = await import("@vercel/blob");
+  // Delete existing blob first so we always have one copy
+  const { blobs } = await list({ prefix: BLOB_PATHNAME });
+  if (blobs.length > 0) {
+    await del(blobs.map((b) => b.url));
+  }
   await put(BLOB_PATHNAME, JSON.stringify({ entries }, null, 2), {
     access: "public",
-    allowOverwrite: true,
+    addRandomSuffix: false,
     contentType: "application/json",
   });
 }
