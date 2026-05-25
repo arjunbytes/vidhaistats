@@ -1,64 +1,81 @@
 import { DailyEntry } from "./schema";
 
 // ── Detect environment ───────────────────────────────────────────────────────
-// BLOB_READ_WRITE_TOKEN is injected automatically when a Blob store is linked.
-const USE_BLOB = !!process.env.BLOB_READ_WRITE_TOKEN;
+const IS_VERCEL = !!process.env.BLOB_READ_WRITE_TOKEN;
 
 const BLOB_PATHNAME = "vidhai-entries.json";
 
 // ── Vercel Blob helpers ──────────────────────────────────────────────────────
 async function blobReadAll(): Promise<DailyEntry[]> {
-  const { list } = await import("@vercel/blob");
-  const { blobs } = await list({ prefix: BLOB_PATHNAME });
-  if (blobs.length === 0) return [];
-  const res = await fetch(blobs[0].url);
-  if (!res.ok) return [];
-  const data = await res.json() as { entries?: DailyEntry[] };
-  return data.entries ?? [];
+  try {
+    const { list } = await import("@vercel/blob");
+    const { blobs } = await list({ prefix: BLOB_PATHNAME });
+    if (blobs.length === 0) return [];
+    const res = await fetch(blobs[0].url, { cache: "no-store" });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { entries?: DailyEntry[] };
+    return data.entries ?? [];
+  } catch (e) {
+    console.error("[store] blobReadAll error:", e);
+    return [];
+  }
 }
 
 async function blobWriteAll(entries: DailyEntry[]): Promise<void> {
-  const { put, list, del } = await import("@vercel/blob");
-  // Delete existing blob first so we always have one copy
-  const { blobs } = await list({ prefix: BLOB_PATHNAME });
-  if (blobs.length > 0) {
-    await del(blobs.map((b) => b.url));
+  try {
+    const { put, list, del } = await import("@vercel/blob");
+    // Remove old blobs first
+    const { blobs } = await list({ prefix: BLOB_PATHNAME });
+    for (const b of blobs) await del(b.url);
+    await put(BLOB_PATHNAME, JSON.stringify({ entries }, null, 2), {
+      access: "public",
+      addRandomSuffix: false,
+      contentType: "application/json",
+    });
+  } catch (e) {
+    console.error("[store] blobWriteAll error:", e);
+    throw e;
   }
-  await put(BLOB_PATHNAME, JSON.stringify({ entries }, null, 2), {
-    access: "public",
-    addRandomSuffix: false,
-    contentType: "application/json",
-  });
 }
 
-// ── JSON file helpers (local dev) ────────────────────────────────────────────
-function jsonReadAll(): DailyEntry[] {
-  const fs   = require("fs")   as typeof import("fs");
-  const path = require("path") as typeof import("path");
-  const dir  = path.join(process.cwd(), "data");
-  const file = path.join(dir, "entries.json");
-  if (!fs.existsSync(dir))  fs.mkdirSync(dir, { recursive: true });
-  if (!fs.existsSync(file)) fs.writeFileSync(file, JSON.stringify({ entries: [] }, null, 2));
+// ── Local JSON file helpers ──────────────────────────────────────────────────
+import fs from "fs";
+import path from "path";
+
+const DATA_DIR  = path.join(process.cwd(), "data");
+const DATA_FILE = path.join(DATA_DIR, "entries.json");
+
+function ensureFile() {
   try {
-    return (JSON.parse(fs.readFileSync(file, "utf-8")).entries ?? []) as DailyEntry[];
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    if (!fs.existsSync(DATA_FILE))
+      fs.writeFileSync(DATA_FILE, JSON.stringify({ entries: [] }, null, 2));
+  } catch { /* read-only fs on Vercel — safe to ignore */ }
+}
+
+function jsonReadAll(): DailyEntry[] {
+  try {
+    ensureFile();
+    return (JSON.parse(fs.readFileSync(DATA_FILE, "utf-8")).entries ?? []) as DailyEntry[];
   } catch { return []; }
 }
 
 function jsonWriteAll(entries: DailyEntry[]): void {
-  const fs   = require("fs")   as typeof import("fs");
-  const path = require("path") as typeof import("path");
-  const file = path.join(process.cwd(), "data", "entries.json");
-  fs.writeFileSync(file, JSON.stringify({ entries }, null, 2));
+  try {
+    ensureFile();
+    fs.writeFileSync(DATA_FILE, JSON.stringify({ entries }, null, 2));
+  } catch { /* silently fail on read-only fs */ }
 }
 
-// ── Async public API (used by API routes) ────────────────────────────────────
+// ── Async public API (API routes + server components) ───────────────────────
 
 export async function readAllAsync(): Promise<DailyEntry[]> {
-  return USE_BLOB ? blobReadAll() : jsonReadAll();
+  return IS_VERCEL ? blobReadAll() : jsonReadAll();
 }
 
 export async function writeAllAsync(entries: DailyEntry[]): Promise<void> {
-  return USE_BLOB ? blobWriteAll(entries) : jsonWriteAll(entries);
+  if (IS_VERCEL) return blobWriteAll(entries);
+  jsonWriteAll(entries);
 }
 
 export async function upsertEntryAsync(entry: DailyEntry): Promise<DailyEntry> {
@@ -90,9 +107,9 @@ export async function deleteEntryAsync(date: string): Promise<boolean> {
   return true;
 }
 
-// ── Sync shims for server-side page components (local only) ──────────────────
+// ── Sync shims (server components — local dev only) ──────────────────────────
 export function readAll(): DailyEntry[] { return jsonReadAll(); }
-export function writeAll(e: DailyEntry[]): void { jsonWriteAll(e); }
+export function writeAll(entries: DailyEntry[]): void { jsonWriteAll(entries); }
 export function findByDate(date: string): DailyEntry | null {
   return jsonReadAll().find((e) => e.date === date) ?? null;
 }
