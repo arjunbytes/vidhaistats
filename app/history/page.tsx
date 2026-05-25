@@ -1,6 +1,6 @@
 import React from "react";
 import Link from "next/link";
-import { readAll } from "@/lib/store";
+import { readAllAsync } from "@/lib/store";
 import { CATEGORIES, STAGES, formatDate, rowTotal } from "@/lib/schema";
 import {
   Open24Regular,
@@ -14,8 +14,8 @@ const STAGE_ROWS = STAGES.flatMap((s) =>
   s.subStages.map((sub) => ({ stage: s.stage, subStage: sub }))
 );
 
-export default function HistoryPage() {
-  const allEntries = readAll().sort((a, b) => (a.date < b.date ? 1 : -1));
+export default async function HistoryPage() {
+  const allEntries = (await readAllAsync()).sort((a, b) => (a.date < b.date ? 1 : -1));
 
   // Always show last 5 calendar days (newest first), with zeros for missing days
   const last5Dates = Array.from({ length: 5 }, (_, i) => {

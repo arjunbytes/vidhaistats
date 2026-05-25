@@ -1,4 +1,4 @@
-import { readAll } from "@/lib/store";
+import { readAllAsync } from "@/lib/store";
 import { CATEGORIES, formatDate, rowTotal } from "@/lib/schema";
 import DashboardCharts from "@/components/DashboardCharts";
 import {
@@ -10,8 +10,8 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export default function DashboardPage() {
-  const entries = readAll().sort((a, b) => (a.date < b.date ? -1 : 1));
+export default async function DashboardPage() {
+  const entries = (await readAllAsync()).sort((a, b) => (a.date < b.date ? -1 : 1));
 
   // Trend data (chronological)
   const trendData = entries.map((e) => {
