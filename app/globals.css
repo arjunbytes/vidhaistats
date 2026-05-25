@@ -1,0 +1,142 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --fluent-bg: #F5F5F5;
+  --fluent-surface: #FFFFFF;
+  --fluent-border: #E1E1E1;
+  --fluent-primary: #00abc0;
+  --fluent-text: #242424;
+  --fluent-text-secondary: #909090;
+}
+
+html,
+body {
+  background-color: var(--fluent-bg);
+  color: var(--fluent-text);
+  font-family: "Segoe UI", "SegoeUI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Fluent-style scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #C7C7C7;
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #A0A0A0;
+}
+
+.fluent-card {
+  background: var(--fluent-surface);
+  border: 1px solid var(--fluent-border);
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04), 0 0 2px rgba(0, 0, 0, 0.06);
+}
+
+.fluent-card-elevated {
+  background: var(--fluent-surface);
+  border: 1px solid var(--fluent-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.06), 0 0 2px rgba(0, 0, 0, 0.08);
+}
+
+/* Sticky table headers */
+.fluent-table thead th {
+  position: sticky;
+  top: 0;
+  background: #F0F4F8;
+  z-index: 10;
+}
+
+/* Smooth focus ring like Fluent */
+input:focus,
+button:focus {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+/* Hide number input spinners globally */
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] {
+  -moz-appearance: textfield;
+}
+
+/* Table cell input — compact, clean */
+.cell-input {
+  display: block;
+  width: 100%;
+  height: 32px;
+  padding: 0 6px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 500;
+  background: transparent;
+  border: 1.5px solid transparent;
+  border-radius: 5px;
+  transition: border-color 0.12s, background 0.12s;
+  cursor: text;
+}
+.cell-input:hover {
+  border-color: #D1D1D1;
+  background: #fff;
+}
+.cell-input:focus {
+  border-color: var(--fluent-primary);
+  background: #fff;
+  outline: none;
+}
+.cell-input.received {
+  color: #00abc0;
+}
+.cell-input.received:focus {
+  border-color: #00abc0;
+}
+.cell-input.complete {
+  color: #909090;
+}
+.cell-input.complete:focus {
+  border-color: #909090;
+}
+
+.fluent-input {
+  border: 1px solid #D1D1D1;
+  border-bottom: 1px solid #909090;
+  border-radius: 4px;
+  background: #FFFFFF;
+  padding: 6px 10px;
+  font-size: 14px;
+  transition: all 0.1s ease;
+}
+.fluent-input:hover {
+  border-color: #A0A0A0;
+}
+.fluent-input:focus {
+  border-color: var(--fluent-primary);
+  border-bottom-width: 2px;
+  outline: none;
+}
+
+/* Subtle row hover */
+.fluent-row:hover {
+  background-color: #F5F9FC;
+}
