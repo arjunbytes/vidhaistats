@@ -240,8 +240,8 @@ export default async function HistoryPage() {
                 </thead>
                 <tbody>
                   {last5.map((e, di) => {
-                    const appsRow = e.rows.find((r) => r.stage === "No of Applications Received");
-                    const hvRow   = e.rows.find((r) => r.stage === "HV Completed");
+                    const appsRow = e.rows.find((r) => r.stage === "Front Sheet Entry");
+                    const hvRow   = e.rows.find((r) => r.stage === "House Visit" && r.subStage === "Completed");
                     const bgClass = di % 2 === 0 ? "bg-white" : "bg-[#FAFAFA]";
                     return (
                       <React.Fragment key={`cat-${e.id}`}>
@@ -318,10 +318,10 @@ export default async function HistoryPage() {
                 <thead>
                   <tr className="bg-[#F0F4F8]">
                     <th className="border-b border-r border-[#E1E1E1] px-4 py-3 text-left font-semibold text-[#242424] whitespace-nowrap">Date</th>
-                    <th className="border-b border-r border-[#E1E1E1] px-4 py-3 text-right font-semibold text-[#242424] whitespace-nowrap">Applications Received</th>
-                    <th className="border-b border-r border-[#E1E1E1] px-4 py-3 text-right font-semibold text-[#242424] whitespace-nowrap">HV Completed</th>
-                    <th className="border-b border-r border-[#E1E1E1] px-4 py-3 text-right font-semibold text-[#242424] whitespace-nowrap">Review Select</th>
-                    <th className="border-b border-r border-[#E1E1E1] px-4 py-3 text-right font-semibold text-[#242424] whitespace-nowrap">Final Select</th>
+                    <th className="border-b border-r border-[#E1E1E1] px-4 py-3 text-right font-semibold text-[#242424] whitespace-nowrap">Front Sheet Entries</th>
+                    <th className="border-b border-r border-[#E1E1E1] px-4 py-3 text-right font-semibold text-[#242424] whitespace-nowrap">House Visit Completed</th>
+                    <th className="border-b border-r border-[#E1E1E1] px-4 py-3 text-right font-semibold text-[#242424] whitespace-nowrap">Review Selected</th>
+                    <th className="border-b border-r border-[#E1E1E1] px-4 py-3 text-right font-semibold text-[#242424] whitespace-nowrap">Profiles Created</th>
                     <th className="border-b border-r border-[#E1E1E1] bg-[#e6f8fb] px-4 py-3 text-right font-semibold text-[#00abc0] whitespace-nowrap">Overall Count</th>
                     <th className="border-b border-r border-[#E1E1E1] bg-[#e6f8fb] px-4 py-3 text-right font-semibold text-[#00abc0] whitespace-nowrap">Completed Count</th>
                     <th className="border-b border-r border-[#E1E1E1] bg-[#fff3e0] px-4 py-3 text-right font-semibold text-[#e07800] whitespace-nowrap">Pending Count</th>
@@ -331,10 +331,10 @@ export default async function HistoryPage() {
                 </thead>
                 <tbody>
                   {allEntries.map((e, i) => {
-                    const apps = e.rows.find((r) => r.stage === "No of Applications Received");
-                    const hv = e.rows.find((r) => r.stage === "HV Completed");
-                    const reviewSel = e.rows.find((r) => r.stage === "Review" && r.subStage === "Select");
-                    const finalSel = e.rows.find((r) => r.stage === "Final Interview" && r.subStage === "Select");
+                    const apps = e.rows.find((r) => r.stage === "Front Sheet Entry");
+                    const hv = e.rows.find((r) => r.stage === "House Visit" && r.subStage === "Completed");
+                    const reviewSel = e.rows.find((r) => r.stage === "Review" && r.subStage === "Selected");
+                    const finalSel = e.rows.find((r) => r.stage === "Student Profile Created");
                     const overall = apps ? rowTotal(apps) : 0;
                     const completed = hv ? CATEGORIES.reduce((s, c) => s + (hv.pendingCounts?.[c] || 0), 0) : 0;
                     const pending = Math.max(0, overall - completed);
@@ -377,13 +377,13 @@ export default async function HistoryPage() {
                 Cumulative Totals
               </div>
               <h2 className="text-[16px] font-semibold text-[#242424]">
-                Applications Received by Category — All-time
+                Front Sheet Entries by Category — All-time
               </h2>
             </div>
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
               {CATEGORIES.map((c) => {
                 const total = allEntries.reduce((sum, e) => {
-                  const r = e.rows.find((r) => r.stage === "No of Applications Received");
+                  const r = e.rows.find((r) => r.stage === "Front Sheet Entry");
                   return sum + (r ? r.counts[c] || 0 : 0);
                 }, 0);
                 return (

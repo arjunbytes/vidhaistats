@@ -19,25 +19,25 @@ export default function HomePage() {
   const totalApps = entries.reduce(
     (sum, e) =>
       sum +
-      (e.rows.find((r) => r.stage === "No of Applications Received")
-        ? rowTotal(e.rows.find((r) => r.stage === "No of Applications Received")!)
+      (e.rows.find((r) => r.stage === "Front Sheet Entry")
+        ? rowTotal(e.rows.find((r) => r.stage === "Front Sheet Entry")!)
         : 0),
     0
   );
   const reviewSelected = entries.reduce(
     (sum, e) =>
       sum +
-      (e.rows.find((r) => r.stage === "Review" && r.subStage === "Select")
-        ? rowTotal(e.rows.find((r) => r.stage === "Review" && r.subStage === "Select")!)
+      (e.rows.find((r) => r.stage === "Review" && r.subStage === "Selected")
+        ? rowTotal(e.rows.find((r) => r.stage === "Review" && r.subStage === "Selected")!)
         : 0),
     0
   );
   const finalSelected = entries.reduce(
     (sum, e) =>
       sum +
-      (e.rows.find((r) => r.stage === "Final Interview" && r.subStage === "Select")
+      (e.rows.find((r) => r.stage === "Student Profile Created")
         ? rowTotal(
-            e.rows.find((r) => r.stage === "Final Interview" && r.subStage === "Select")!
+            e.rows.find((r) => r.stage === "Student Profile Created")!
           )
         : 0),
     0
@@ -52,7 +52,7 @@ export default function HomePage() {
       tone: "bg-[#e6f8fb] text-[#00abc0]",
     },
     {
-      label: "Applications Received",
+      label: "Front Sheet Entries",
       value: totalApps,
       hint: "cumulative",
       icon: PeopleTeam24Regular,
@@ -66,7 +66,7 @@ export default function HomePage() {
       tone: "bg-[#f4f4f4] text-[#909090]",
     },
     {
-      label: "Final Interview — Selected",
+      label: "Student Profiles Created",
       value: finalSelected,
       hint: "cumulative",
       icon: Checkmark24Regular,

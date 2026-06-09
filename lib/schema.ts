@@ -18,15 +18,13 @@ export interface StageDef {
 }
 
 export const STAGES: StageDef[] = [
-  { stage: "No of Applications Received", subStages: [""] },
-  { stage: "Application Number Generated", subStages: [""] },
-  { stage: "Letter Reading", subStages: [""] },
   { stage: "Front Sheet Entry", subStages: [""] },
-  { stage: "One to One Profile Filled", subStages: [""] },
-  { stage: "One to One", subStages: ["HV", "WL", "R"] },
-  { stage: "HV Completed", subStages: [""] },
-  { stage: "Review", subStages: ["Select", "Hold", "Reject"] },
-  { stage: "Final Interview", subStages: ["Select", "Hold", "Reject"] },
+  { stage: "One to One", subStages: ["Received", "Waiting List", "Rejected"] },
+  { stage: "L1 Completed", subStages: [""] },
+  { stage: "L2 Completed", subStages: [""] },
+  { stage: "House Visit", subStages: ["Received", "Rejected", "Completed"] },
+  { stage: "Review", subStages: ["Selected", "Hold", "Rejected"] },
+  { stage: "Student Profile Created", subStages: [""] },
 ];
 
 export interface StageRow {

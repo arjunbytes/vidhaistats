@@ -5,10 +5,11 @@ import { useSearchParams, useRouter } from "next/navigation";
 import {
   CATEGORIES,
   Category,
+  DailyEntry,
   STAGES,
   StageRow,
   makeEmptyRows,
-  rowTotal,
+  formatDate,
   todayIso,
 } from "@/lib/schema";
 import {
@@ -31,31 +32,52 @@ export default function EntryClient() {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
   const [isDirty, setIsDirty] = useState(false);
+  const [carriedFrom, setCarriedFrom] = useState<string | null>(null);
 
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load entry for selected date
+  // Load entry for the selected date — carry forward latest prior day when empty
   useEffect(() => {
     let active = true;
     setLoading(true);
-    fetch(`/api/entries?date=${date}`)
+    const base = makeEmptyRows();
+    const mergeRows = (src: StageRow[]): StageRow[] =>
+      base.map((br) => {
+        const found = src.find(
+          (er) => er.stage === br.stage && er.subStage === br.subStage
+        );
+        if (!found) return br;
+        const counts = {} as Record<Category, number>;
+        const pendingCounts = {} as Record<Category, number>;
+        CATEGORIES.forEach((c) => {
+          counts[c] = found.counts[c] ?? 0;
+          pendingCounts[c] = found.pendingCounts?.[c] ?? 0;
+        });
+        return { stage: br.stage, subStage: br.subStage, counts, pendingCounts };
+      });
+    fetch(`/api/entries`)
       .then((r) => r.json())
       .then((d) => {
         if (!active) return;
-        if (d.entry && d.entry.rows) {
-          const base = makeEmptyRows();
-          const merged = base.map((br) => {
-            const found = d.entry.rows.find(
-              (er: StageRow) => er.stage === br.stage && er.subStage === br.subStage
-            );
-            if (!found) return br;
-            return { ...found, pendingCounts: found.pendingCounts ?? br.pendingCounts };
-          });
-          setRows(merged);
-          setSavedAt(d.entry.updatedAt || null);
+        const all: DailyEntry[] = [...(d.entries ?? [])].sort((a, b) =>
+          a.date < b.date ? 1 : -1
+        );
+        const exact = all.find((e) => e.date === date);
+        if (exact && exact.rows) {
+          setRows(mergeRows(exact.rows));
+          setSavedAt(exact.updatedAt || null);
+          setCarriedFrom(null);
         } else {
-          setRows(makeEmptyRows());
-          setSavedAt(null);
+          const prev = all.find((e) => e.date < date);
+          if (prev && prev.rows) {
+            setRows(mergeRows(prev.rows));
+            setSavedAt(null);
+            setCarriedFrom(prev.date);
+          } else {
+            setRows(makeEmptyRows());
+            setSavedAt(null);
+            setCarriedFrom(null);
+          }
         }
         setIsDirty(false);
       })
@@ -64,40 +86,17 @@ export default function EntryClient() {
   }, [date]);
 
   // ── computed summaries ──────────────────────────────────────────────────────
-  const overallCount = useMemo(() => {
-    const r = rows.find((r) => r.stage === "No of Applications Received");
-    return r ? rowTotal(r) : 0;
-  }, [rows]);
-
-  const completedCount = useMemo(() => {
-    const r = rows.find((r) => r.stage === "HV Completed");
-    return r ? rowTotal(r) : 0;
-  }, [rows]);
-
-  const categoryReceived = useMemo(() => {
-    const r = rows.find((r) => r.stage === "No of Applications Received");
-    const t: Record<string, number> = {};
-    CATEGORIES.forEach((c) => (t[c] = r ? r.counts[c] || 0 : 0));
-    return t;
-  }, [rows]);
-
-  const categoryCompleted = useMemo(() => {
-    const r = rows.find((r) => r.stage === "HV Completed");
-    const t: Record<string, number> = {};
-    CATEGORIES.forEach((c) => (t[c] = r ? r.counts[c] || 0 : 0));
-    return t;
-  }, [rows]);
-
   const categoryPending = useMemo(() => {
-    const r = rows.find((r) => r.stage === "HV Completed");
     const t: Record<string, number> = {};
-    CATEGORIES.forEach((c) => (t[c] = r ? r.pendingCounts?.[c] || 0 : 0));
+    CATEGORIES.forEach((c) => (t[c] = rows.reduce((s, r) => s + (r.pendingCounts?.[c] || 0), 0)));
     return t;
   }, [rows]);
 
   const totalPending = useMemo(() => {
-    const r = rows.find((r) => r.stage === "HV Completed");
-    return r ? CATEGORIES.reduce((s, c) => s + (r.pendingCounts?.[c] || 0), 0) : 0;
+    return rows.reduce(
+      (sum, r) => sum + CATEGORIES.reduce((s, c) => s + (r.pendingCounts?.[c] || 0), 0),
+      0
+    );
   }, [rows]);
 
   // ── save ────────────────────────────────────────────────────────────────────
@@ -134,27 +133,17 @@ export default function EntryClient() {
   }, [rows, isDirty, loading, handleSave]);
 
   // ── cell updaters ───────────────────────────────────────────────────────────
-  function updateCell(stage: string, subStage: string, cat: Category, value: string) {
-    const num = Math.max(0, parseInt(value || "0", 10) || 0);
-    setRows((prev) =>
-      prev.map((r) =>
-        r.stage === stage && r.subStage === subStage
-          ? { ...r, counts: { ...r.counts, [cat]: num } }
-          : r
-      )
-    );
-    setIsDirty(true);
-  }
-
   function updatePendingCell(stage: string, subStage: string, cat: Category, value: string) {
     const num = Math.max(0, parseInt(value || "0", 10) || 0);
     setRows((prev) =>
       prev.map((r) => {
         if (r.stage !== stage || r.subStage !== subStage) return r;
-        const base = {} as Record<Category, number>;
-        CATEGORIES.forEach((c) => { base[c] = r.pendingCounts?.[c] ?? 0; });
-        base[cat] = num;
-        return { ...r, pendingCounts: base };
+        const pending = {} as Record<Category, number>;
+        CATEGORIES.forEach((c) => { pending[c] = r.pendingCounts?.[c] ?? 0; });
+        pending[cat] = num;
+        // keep counts in sync so the table value and the dashboards agree
+        const counts = { ...r.counts, [cat]: num };
+        return { ...r, counts, pendingCounts: pending };
       })
     );
     setIsDirty(true);
@@ -216,6 +205,11 @@ export default function EntryClient() {
               Last saved: {new Date(savedAt).toLocaleString("en-IN")}
             </div>
           )}
+          {!savedAt && carriedFrom && (
+            <div className="mt-1 text-[12px] font-medium text-[#006b78]">
+              Carried forward from {formatDate(carriedFrom)} — adjust the numbers and Save to record this day.
+            </div>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -267,43 +261,26 @@ export default function EntryClient() {
           <div className="overflow-x-auto">
             <table className="fluent-table w-full border-collapse text-[13px]">
               <thead>
-                {/* Row 1 — category group headers */}
+                {/* Header — Stage, Sub-Stage, one column per category, total */}
                 <tr>
-                  <th rowSpan={2} className="border-b-2 border-r border-[#E1E1E1] px-3 py-2 text-left font-semibold text-[#242424] align-bottom">
+                  <th className="border-b-2 border-r border-[#E1E1E1] px-3 py-2 text-left font-semibold text-[#242424] align-bottom">
                     Stage
                   </th>
-                  <th rowSpan={2} className="border-b-2 border-r border-[#E1E1E1] px-3 py-2 text-left font-semibold text-[#242424] align-bottom">
+                  <th className="border-b-2 border-r border-[#E1E1E1] px-3 py-2 text-left font-semibold text-[#242424] align-bottom">
                     Sub-Stage
                   </th>
                   {CATEGORIES.map((c) => (
                     <th
                       key={c}
-                      colSpan={2}
-                      className="border-b border-r border-[#E1E1E1] px-2 py-2 text-center font-semibold text-[#242424]"
+                      className="border-b-2 border-r border-[#E1E1E1] px-2 py-2 text-center font-semibold text-[#242424]"
                       title={c}
                     >
                       <span className="block leading-tight text-[12px]">{c}</span>
                     </th>
                   ))}
-                  <th rowSpan={2} className="border-b-2 border-r border-[#E1E1E1] bg-[#e6f8fb] px-3 py-2 text-center font-semibold text-[#00abc0] align-bottom">
-                    Overall Count
-                  </th>
-                  <th rowSpan={2} className="border-b-2 border-[#E1E1E1] bg-[#e6f8fb] px-3 py-2 text-center font-semibold text-[#00abc0] align-bottom">
+                  <th className="border-b-2 border-[#E1E1E1] bg-[#e6f8fb] px-3 py-2 text-center font-semibold text-[#00abc0] align-bottom">
                     Completed Count
                   </th>
-                </tr>
-                {/* Row 2 — Received / Complete sub-headers */}
-                <tr>
-                  {CATEGORIES.map((c) => (
-                    <React.Fragment key={c}>
-                      <th className="border-b border-r border-[#E1E1E1] bg-[#e6f8fb] px-1 py-1.5 text-center text-[10px] font-semibold uppercase tracking-wide text-[#00abc0]">
-                        Received
-                      </th>
-                      <th className="border-b border-r border-[#E1E1E1] bg-[#f4f4f4] px-1 py-1.5 text-center text-[10px] font-semibold uppercase tracking-wide text-[#909090]">
-                        Complete
-                      </th>
-                    </React.Fragment>
-                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -311,7 +288,6 @@ export default function EntryClient() {
                   <React.Fragment key={group.stage}>
                     {group.subRows.map((r, idx) => {
                       const isFirstOfGroup = idx === 0;
-                      const total = rowTotal(r);
                       const pendingTotal = CATEGORIES.reduce(
                         (s, c) => s + (r.pendingCounts?.[c] || 0), 0
                       );
@@ -332,37 +308,20 @@ export default function EntryClient() {
                             {r.subStage || "—"}
                           </td>
                           {CATEGORIES.map((c) => (
-                            <React.Fragment key={c}>
-                              {/* Received cell — editable */}
-                              <td className="border-b border-r border-[#E1E1E1] bg-[#e6f8fb]/30 px-1 py-1">
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={r.counts[c]}
-                                  onChange={(e) => updateCell(r.stage, r.subStage, c, e.target.value)}
-                                  onFocus={(e) => e.target.select()}
-                                  className="cell-input received"
-                                />
-                              </td>
-                              {/* Complete cell — editable */}
-                              <td className="border-b border-r border-[#E1E1E1] bg-[#f4f4f4]/60 px-1 py-1">
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={r.pendingCounts?.[c] ?? 0}
-                                  onChange={(e) => updatePendingCell(r.stage, r.subStage, c, e.target.value)}
-                                  onFocus={(e) => e.target.select()}
-                                  className="cell-input complete"
-                                />
-                              </td>
-                            </React.Fragment>
+                            /* Complete cell — editable */
+                            <td key={c} className="border-b border-r border-[#E1E1E1] bg-[#f4f4f4]/60 px-1 py-1">
+                              <input
+                                type="number"
+                                min={0}
+                                value={r.pendingCounts?.[c] ?? 0}
+                                onChange={(e) => updatePendingCell(r.stage, r.subStage, c, e.target.value)}
+                                onFocus={(e) => e.target.select()}
+                                className="cell-input complete"
+                              />
+                            </td>
                           ))}
-                          {/* Overall Count = Received total */}
-                          <td className="border-b border-r border-[#E1E1E1] bg-[#e6f8fb] px-3 py-2 text-center font-semibold text-[#00abc0]">
-                            {total}
-                          </td>
                           {/* Completed Count — sum of Complete (pendingCounts) for this row */}
-                          <td className="border-b border-[#E1E1E1] bg-[#e6f8fb] px-3 py-2 text-center font-semibold text-[#00abc0]">
+                          <td className="border-b border-[#E1E1E1] bg-[#e6f8fb] px-3 py-2 text-center font-bold text-[#00abc0]">
                             {pendingTotal}
                           </td>
                         </tr>
@@ -376,18 +335,10 @@ export default function EntryClient() {
                     Summary
                   </td>
                   {CATEGORIES.map((c) => (
-                    <React.Fragment key={c}>
-                      <td className="border-t-2 border-[#00abc0] bg-[#e6f8fb]/40 px-2 py-1.5 text-center text-[13px] font-bold text-[#00abc0]">
-                        {categoryCompleted[c]}
-                      </td>
-                      <td className="border-t-2 border-[#909090] bg-[#f4f4f4]/60 px-2 py-1.5 text-center text-[13px] font-bold text-[#909090]">
-                        {categoryPending[c]}
-                      </td>
-                    </React.Fragment>
+                    <td key={c} className="border-t-2 border-[#909090] bg-[#f4f4f4]/60 px-2 py-1.5 text-center text-[13px] font-bold text-[#909090]">
+                      {categoryPending[c]}
+                    </td>
                   ))}
-                  <td className="border-t-2 border-[#00abc0] bg-[#00abc0] px-3 py-2 text-center text-[14px] font-bold text-white">
-                    {overallCount}
-                  </td>
                   <td className="border-t-2 border-[#00abc0] bg-[#00abc0] px-3 py-2 text-center text-[14px] font-bold text-white">
                     {totalPending}
                   </td>
@@ -399,7 +350,7 @@ export default function EntryClient() {
       )}
 
       <div className="mt-4 rounded-md border border-[#b3e8ef] bg-[#e6f8fb] p-3 text-[12px] text-[#007a8a]">
-        <strong>Tip:</strong> Both <strong>Received</strong> (green) and <strong>Complete</strong> (orange) columns are editable — Tab between cells. Click <strong>Save Entry</strong> when done.
+        <strong>Tip:</strong> Enter the count for each category — Tab between cells. Click <strong>Save Entry</strong> when done.
       </div>
     </div>
   );

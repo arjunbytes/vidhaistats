@@ -82,7 +82,7 @@ export default function DashboardCharts({
               <Area
                 type="monotone"
                 dataKey="received"
-                name="Applications Received"
+                name="Front Sheet Entries"
                 stroke="#00abc0"
                 strokeWidth={2}
                 fill="url(#recv)"
@@ -90,7 +90,7 @@ export default function DashboardCharts({
               <Area
                 type="monotone"
                 dataKey="hv"
-                name="HV Completed"
+                name="House Visit Completed"
                 stroke="#00abc0"
                 strokeWidth={2}
                 fill="url(#hv)"
@@ -98,7 +98,7 @@ export default function DashboardCharts({
               <Line
                 type="monotone"
                 dataKey="reviewSel"
-                name="Review Select"
+                name="Review Selected"
                 stroke="#909090"
                 strokeWidth={2}
                 dot={{ r: 3 }}
@@ -106,7 +106,7 @@ export default function DashboardCharts({
               <Line
                 type="monotone"
                 dataKey="finalSel"
-                name="Final Select"
+                name="Student Profile Created"
                 stroke="#00abc0"
                 strokeWidth={2}
                 dot={{ r: 3 }}
@@ -163,7 +163,7 @@ export default function DashboardCharts({
             Composition
           </div>
           <h3 className="text-[16px] font-semibold text-[#242424]">
-            Applications by Category
+            Front Sheet Entries by Category
           </h3>
         </div>
         <div className="h-72 w-full">
@@ -202,7 +202,7 @@ export default function DashboardCharts({
             Selection Outcomes
           </div>
           <h3 className="text-[16px] font-semibold text-[#242424]">
-            Review vs Final Interview — Select / Hold / Reject
+            One to One vs Review — Outcomes
           </h3>
         </div>
         <div className="h-72 w-full">
@@ -220,9 +220,9 @@ export default function DashboardCharts({
                 }}
               />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="Select" stackId="a" fill="#00abc0" />
-              <Bar dataKey="Hold" stackId="a" fill="#909090" />
-              <Bar dataKey="Reject" stackId="a" fill="#e04040" />
+              <Bar dataKey="Select" name="Received / Selected" stackId="a" fill="#00abc0" />
+              <Bar dataKey="Hold" name="Hold / Waiting List" stackId="a" fill="#909090" />
+              <Bar dataKey="Reject" name="Rejected" stackId="a" fill="#e04040" />
             </BarChart>
           </ResponsiveContainer>
         </div>

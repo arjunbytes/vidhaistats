@@ -15,13 +15,13 @@ export default async function DashboardPage() {
 
   // Trend data (chronological)
   const trendData = entries.map((e) => {
-    const apps = e.rows.find((r) => r.stage === "No of Applications Received");
-    const hv = e.rows.find((r) => r.stage === "HV Completed");
+    const apps = e.rows.find((r) => r.stage === "Front Sheet Entry");
+    const hv = e.rows.find((r) => r.stage === "House Visit" && r.subStage === "Completed");
     const reviewSel = e.rows.find(
-      (r) => r.stage === "Review" && r.subStage === "Select"
+      (r) => r.stage === "Review" && r.subStage === "Selected"
     );
     const finalSel = e.rows.find(
-      (r) => r.stage === "Final Interview" && r.subStage === "Select"
+      (r) => r.stage === "Student Profile Created"
     );
     return {
       date: new Date(e.date).toLocaleDateString("en-IN", {
@@ -36,21 +36,23 @@ export default async function DashboardPage() {
   });
 
   // Funnel: sum each stage across all entries
-  const stageKeys = [
-    "No of Applications Received",
-    "Application Number Generated",
-    "Letter Reading",
-    "Front Sheet Entry",
-    "One to One Profile Filled",
-    "HV Completed",
+  const funnelSteps: { label: string; stage: string; subStage?: string }[] = [
+    { label: "Front Sheet Entry", stage: "Front Sheet Entry" },
+    { label: "One to One Received", stage: "One to One", subStage: "Received" },
+    { label: "L1 Completed", stage: "L1 Completed" },
+    { label: "L2 Completed", stage: "L2 Completed" },
+    { label: "House Visit Completed", stage: "House Visit", subStage: "Completed" },
+    { label: "Review Selected", stage: "Review", subStage: "Selected" },
+    { label: "Student Profile Created", stage: "Student Profile Created" },
   ];
-  const funnelData = stageKeys.map((stageName) => ({
-    stage: stageName.replace(" Number Generated", " No.").replace(
-      "One to One Profile Filled",
-      "1-1 Profile"
-    ),
+  const funnelData = funnelSteps.map((step) => ({
+    stage: step.label,
     count: entries.reduce((sum, e) => {
-      const r = e.rows.find((r) => r.stage === stageName);
+      const r = e.rows.find(
+        (r) =>
+          r.stage === step.stage &&
+          (step.subStage === undefined || r.subStage === step.subStage)
+      );
       return sum + (r ? rowTotal(r) : 0);
     }, 0),
   }));
@@ -59,7 +61,7 @@ export default async function DashboardPage() {
   const categoryData = CATEGORIES.map((c) => ({
     name: c,
     value: entries.reduce((sum, e) => {
-      const r = e.rows.find((r) => r.stage === "No of Applications Received");
+      const r = e.rows.find((r) => r.stage === "Front Sheet Entry");
       return sum + (r ? r.counts[c] || 0 : 0);
     }, 0),
   }));
@@ -73,23 +75,23 @@ export default async function DashboardPage() {
   }
   const reviewOutcomes = [
     {
-      name: "Review",
-      Select: sumStageSub("Review", "Select"),
-      Hold: sumStageSub("Review", "Hold"),
-      Reject: sumStageSub("Review", "Reject"),
+      name: "One to One",
+      Select: sumStageSub("One to One", "Received"),
+      Hold: sumStageSub("One to One", "Waiting List"),
+      Reject: sumStageSub("One to One", "Rejected"),
     },
     {
-      name: "Final Interview",
-      Select: sumStageSub("Final Interview", "Select"),
-      Hold: sumStageSub("Final Interview", "Hold"),
-      Reject: sumStageSub("Final Interview", "Reject"),
+      name: "Review",
+      Select: sumStageSub("Review", "Selected"),
+      Hold: sumStageSub("Review", "Hold"),
+      Reject: sumStageSub("Review", "Rejected"),
     },
   ];
 
   const totalReceived = funnelData[0]?.count || 0;
-  const totalHv = funnelData[5]?.count || 0;
-  const totalReviewSelect = sumStageSub("Review", "Select");
-  const totalFinalSelect = sumStageSub("Final Interview", "Select");
+  const totalHv = funnelData.find((f) => f.stage === "House Visit Completed")?.count || 0;
+  const totalReviewSelect = sumStageSub("Review", "Selected");
+  const totalFinalSelect = sumStageSub("Student Profile Created", "");
   const conversionRate =
     totalReceived > 0
       ? ((totalFinalSelect / totalReceived) * 100).toFixed(1)
@@ -97,7 +99,7 @@ export default async function DashboardPage() {
 
   const stats = [
     {
-      label: "Applications Received",
+      label: "Front Sheet Entries",
       value: totalReceived,
       hint: "all-time",
       icon: PeopleTeam24Regular,
@@ -118,7 +120,7 @@ export default async function DashboardPage() {
       tone: "bg-[#f4f4f4] text-[#909090]",
     },
     {
-      label: "Final Selects",
+      label: "Profiles Created",
       value: totalFinalSelect,
       hint: `${conversionRate}% conversion`,
       icon: Checkmark24Regular,
